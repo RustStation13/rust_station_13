@@ -1,0 +1,57 @@
+name: Cross-Platform Game Release Compile
+
+# This workflow will compile the game for all major platforms and automatically put the newly built binary zip's on a remote server ready for review.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build for ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+      
+      - name: Install rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
+        
+      - name: Build Release
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release
+      
+      - name: Prepare Dist Folder
+        shell: bash
+        run: |
+          mkdir dist
+          # Copy binary (with .exe for windows)
+          if [ "${{ matrix.os }}" == "windows-latest" ]; then
+            cp target/release/rust_station13.exe dist/
+          else
+            cp target/release/rust_station13 dist/
+          fi
+          # Copy assets folder
+          cp -r assets dist/
+        
+      - name: Zip Package
+        run: |
+          cd dist
+          zip -r ../rust_station13-${{matrix.os}}-${{github.ref_name}}.zip .
+        
+      - name: Upload Zip to Custom Server
+        run: |
+          curl -v -X POST https://nekothecatgirl.com/api/secure/upload \
+             --user "${{secrets.UPLOAD_USER}}:${{secrets.UPLOAD_TOKEN}}" \
+             -H "Content-Type: multipart/form-data" \
+             -F "file=@rust_station13-${{matrix.os}}-${{github.ref_name}}.zip" 
